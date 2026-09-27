@@ -1,8 +1,28 @@
 # codex-switch
 
+## Personal fork
+
+This public fork is maintained by [SoumyaRanjanBiswal1](https://github.com/SoumyaRanjanBiswal1)
+and is based on [xjoker/codex-switch](https://github.com/xjoker/codex-switch).
+It includes [verified quota warmup](WARMUP_FIX.md). Version `20260927.1.0`
+identifies the first fork build. Installers and self-update target this fork;
+GitHub build-provenance verification remains enabled for release updates.
+
+To install directly from this fork with Rust 1.88 or newer:
+
+```bash
+cargo install --git https://github.com/SoumyaRanjanBiswal1/codex-switch.git --branch master --locked --root "$HOME/.local" --force
+```
+
+For a reproducible install, replace `--branch master` with `--rev <commit>`.
+Source installation is available immediately; the release commands below require
+a published release in this fork. The upstream Homebrew tap installs upstream,
+so use source installation to retain this fork's changes.
+
+
 **A multi-account manager for [OpenAI Codex CLI](https://github.com/openai/codex).** Save local Codex logins, monitor quota, and select the best account before the next session.
 
-[中文说明](README_CN.md) · [**Documentation (Wiki)**](https://github.com/xjoker/codex-switch/wiki) · [Releases](https://github.com/xjoker/codex-switch/releases)
+[中文说明](README_CN.md) · [**Documentation (Wiki)**](https://github.com/xjoker/codex-switch/wiki) · [Releases](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases)
 
 > `codex-switch` manages local authentication files. Never publish profiles, `auth.json`, tokens, proxy credentials, or unredacted debug output.
 
@@ -17,13 +37,13 @@ cli_auth_credentials_store = "file"
 Install the stable release — macOS / Linux:
 
 ```bash
-curl -fsSL https://github.com/xjoker/codex-switch/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.sh | bash
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://github.com/xjoker/codex-switch/releases/latest/download/install.ps1 | iex
+irm https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.ps1 | iex
 ```
 
 Homebrew users: `brew install xjoker/tap/codex-switch`.
@@ -47,7 +67,7 @@ codex-switch launch       # start Codex with the best account
 - Displays the main and model-specific quota pools in CLI and TUI views.
 - Selects an eligible account with adaptive, pace-aware scoring, and launches Codex with it.
 - Supports reset cards, quota warmup, JSON output, proxies, and a Beta background daemon (LaunchAgent, systemd, or Windows Task Scheduler; tune `cache_refresh_interval_secs` and `auto_warmup`).
-- Refreshes expiring tokens and updates direct installs: `self-update`, `self-update --stable`, `self-update --version <VERSION>`, or the rolling dev channel via `self-update --dev` — new dev installs use [install.sh](https://github.com/xjoker/codex-switch/releases/download/dev/install.sh) / [install.ps1](https://github.com/xjoker/codex-switch/releases/download/dev/install.ps1) from the `dev` release.
+- Refreshes expiring tokens and updates direct installs: `self-update`, `self-update --stable`, `self-update --version <VERSION>`, or the rolling dev channel via `self-update --dev` — new dev installs use [install.sh](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.sh) / [install.ps1](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.ps1) from the `dev` release.
 - Direct `self-update` verifies both SHA-256 and GitHub build provenance with `gh attestation verify`; install a current [GitHub CLI](https://cli.github.com/) before using it.
 - Runs on macOS, Linux, and Windows.
 

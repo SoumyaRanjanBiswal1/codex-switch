@@ -909,13 +909,13 @@ fn windows_daemon_stop_never_force_kills_a_trusted_process() {
 }
 
 #[test]
-fn release_retests_v0019_upgrade_on_all_supported_hosts() {
+fn upstream_only_release_retests_v0019_upgrade_on_all_supported_hosts() {
     let workflow = repo_file(".github/workflows/release.yml");
 
     for required in [
         "legacy-upgrade:",
         "needs: [meta, release]",
-        "if: needs.meta.outputs.is_dev == 'true' || needs.meta.outputs.prerelease == 'false'",
+        "if: github.repository == 'xjoker/codex-switch' && (needs.meta.outputs.is_dev == 'true' || needs.meta.outputs.prerelease == 'false')",
         "ubuntu-latest",
         "macos-latest",
         "windows-latest",
@@ -1015,11 +1015,14 @@ fn readmes_describe_current_cli_and_codex_requirements() {
 
 #[test]
 fn installer_instructions_use_channel_matched_release_assets() {
-    let stable_unix = "https://github.com/xjoker/codex-switch/releases/latest/download/install.sh";
+    let stable_unix =
+        "https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.sh";
     let stable_windows =
-        "https://github.com/xjoker/codex-switch/releases/latest/download/install.ps1";
-    let dev_unix = "https://github.com/xjoker/codex-switch/releases/download/dev/install.sh";
-    let dev_windows = "https://github.com/xjoker/codex-switch/releases/download/dev/install.ps1";
+        "https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.ps1";
+    let dev_unix =
+        "https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.sh";
+    let dev_windows =
+        "https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.ps1";
 
     for path in [
         "README.md",

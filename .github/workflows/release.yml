@@ -223,25 +223,25 @@ jobs:
           ### Stable: macOS / Linux
 
           ```bash
-          curl -fsSL https://github.com/xjoker/codex-switch/releases/latest/download/install.sh | bash
+          curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.sh | bash
           ```
 
           ### Stable: Windows PowerShell
 
           ```powershell
-          irm https://github.com/xjoker/codex-switch/releases/latest/download/install.ps1 | iex
+          irm https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.ps1 | iex
           ```
 
           ### Rolling dev: macOS / Linux
 
           ```bash
-          curl -fsSL https://github.com/xjoker/codex-switch/releases/download/dev/install.sh | bash -s -- --dev
+          curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.sh | bash -s -- --dev
           ```
 
           ### Rolling dev: Windows PowerShell
 
           ```powershell
-          $env:CS_DEV="1"; irm https://github.com/xjoker/codex-switch/releases/download/dev/install.ps1 | iex
+          $env:CS_DEV="1"; irm https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.ps1 | iex
           ```
 
           ### Manual Download
@@ -271,7 +271,7 @@ jobs:
 
           **Older macOS/Linux direct install in \`/usr/local/bin\`:** migrate once with the matching user-level installer. It verifies the download, requests \`sudo\` once, installs to \`~/.local/bin\`, removes the old binary, and preserves profiles and configuration.
 
-          \`curl -fsSL https://github.com/xjoker/codex-switch/releases/download/dev/install.sh | bash -s -- --dev\`
+          \`curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.sh | bash -s -- --dev\`
 
           Version: \`${RELEASE_VERSION}\`
           EOF
@@ -302,7 +302,7 @@ jobs:
           body: |
             **Older macOS/Linux direct install in `/usr/local/bin`:** migrate once with the matching user-level installer. It verifies the download, requests `sudo` once, installs to `~/.local/bin`, removes the old binary, and preserves profiles and configuration.
 
-            `curl -fsSL https://github.com/xjoker/codex-switch/releases/download/v${{ needs.meta.outputs.version }}/install.sh | bash`
+            `curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/v${{ needs.meta.outputs.version }}/install.sh | bash`
           files: |
             artifacts/*
         env:
@@ -310,7 +310,7 @@ jobs:
 
   legacy-upgrade:
     needs: [meta, release]
-    if: needs.meta.outputs.is_dev == 'true' || needs.meta.outputs.prerelease == 'false'
+    if: github.repository == 'xjoker/codex-switch' && (needs.meta.outputs.is_dev == 'true' || needs.meta.outputs.prerelease == 'false')
     strategy:
       fail-fast: false
       matrix:
@@ -487,7 +487,7 @@ jobs:
 
   homebrew:
     needs: [meta, release]
-    if: needs.meta.outputs.prerelease == 'false'
+    if: github.repository == 'xjoker/codex-switch' && needs.meta.outputs.prerelease == 'false'
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.meta.outputs.version }}

@@ -1,11 +1,11 @@
 [package]
 name = "codex-switch"
-version = "20260804.1.0"
+version = "20260927.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Codex account switcher — multi-profile manager with usage dashboard"
 license = "MIT"
-repository = "https://github.com/xjoker/codex-switch"
+repository = "https://github.com/SoumyaRanjanBiswal1/codex-switch"
 keywords = ["codex", "openai", "account", "switcher", "cli"]
 categories = ["command-line-utilities"]
 

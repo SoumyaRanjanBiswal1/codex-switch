@@ -1,8 +1,28 @@
 # codex-switch
 
+## Personal fork
+
+This public fork is maintained by [SoumyaRanjanBiswal1](https://github.com/SoumyaRanjanBiswal1)
+and is based on [xjoker/codex-switch](https://github.com/xjoker/codex-switch).
+It includes [verified quota warmup](WARMUP_FIX.md). Version `20260927.1.0`
+identifies the first fork build. Installers and self-update target this fork;
+GitHub build-provenance verification remains enabled for release updates.
+
+To install directly from this fork with Rust 1.88 or newer:
+
+```bash
+cargo install --git https://github.com/SoumyaRanjanBiswal1/codex-switch.git --branch master --locked --root "$HOME/.local" --force
+```
+
+For a reproducible install, replace `--branch master` with `--rev <commit>`.
+Source installation is available immediately; the release commands below require
+a published release in this fork. The upstream Homebrew tap installs upstream,
+so use source installation to retain this fork's changes.
+
+
 **[OpenAI Codex CLI](https://github.com/openai/codex) 多账号管理工具** — 保存本机 Codex 登录、监控配额，并在下一次会话前选出最佳账号。
 
-[English README](README.md) · [**完整文档（Wiki）**](https://github.com/xjoker/codex-switch/wiki) · [中文指南](https://github.com/xjoker/codex-switch/wiki/Chinese-Guide) · [Releases](https://github.com/xjoker/codex-switch/releases)
+[English README](README.md) · [**完整文档（Wiki）**](https://github.com/xjoker/codex-switch/wiki) · [中文指南](https://github.com/xjoker/codex-switch/wiki/Chinese-Guide) · [Releases](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases)
 
 > `codex-switch` 会在本机保存账号凭据。请勿分享 profile、`auth.json`、Token、代理凭据或未脱敏的 debug 输出。
 
@@ -17,13 +37,13 @@ cli_auth_credentials_store = "file"
 安装正式版 — macOS / Linux：
 
 ```bash
-curl -fsSL https://github.com/xjoker/codex-switch/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.sh | bash
 ```
 
 Windows PowerShell：
 
 ```powershell
-irm https://github.com/xjoker/codex-switch/releases/latest/download/install.ps1 | iex
+irm https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/latest/download/install.ps1 | iex
 ```
 
 Homebrew 用户：`brew install xjoker/tap/codex-switch`。
@@ -47,7 +67,7 @@ codex-switch launch       # 用最佳账号启动 Codex
 - CLI 与 TUI 展示主额度池和每个模型的独立额度池。
 - 自适应配速感知评分自动选号，并可直接用它启动 Codex。
 - 支持重置卡、配额预热、JSON 输出、代理，以及 Beta 后台守护进程（macOS LaunchAgent / Linux systemd / Windows 任务计划程序 Task Scheduler；可调 `cache_refresh_interval_secs` 与 `auto_warmup`）。
-- 自动刷新即将过期的 Token；直装版本自更新：`self-update`、`self-update --stable`、`self-update --version <VERSION>`，或用 `self-update --dev` 切换滚动开发通道 — 新装开发版使用 dev release 的 [install.sh](https://github.com/xjoker/codex-switch/releases/download/dev/install.sh) / [install.ps1](https://github.com/xjoker/codex-switch/releases/download/dev/install.ps1)。
+- 自动刷新即将过期的 Token；直装版本自更新：`self-update`、`self-update --stable`、`self-update --version <VERSION>`，或用 `self-update --dev` 切换滚动开发通道 — 新装开发版使用 dev release 的 [install.sh](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.sh) / [install.ps1](https://github.com/SoumyaRanjanBiswal1/codex-switch/releases/download/dev/install.ps1)。
 - 直装版 `self-update` 同时校验 SHA-256 与 GitHub 构建来源，执行时会调用 `gh attestation verify`；使用前需安装当前版 [GitHub CLI](https://cli.github.com/)。
 - 支持 macOS、Linux、Windows。
 

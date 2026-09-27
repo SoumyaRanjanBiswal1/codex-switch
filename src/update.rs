@@ -7,11 +7,11 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const REPO_OWNER: &str = "xjoker";
+const REPO_OWNER: &str = "SoumyaRanjanBiswal1";
 const REPO_NAME: &str = "codex-switch";
 const BIN_NAME: &str = "codex-switch";
 const PROVENANCE_ASSET_NAME: &str = "codex-switch-build-provenance.json";
-const RELEASE_WORKFLOW: &str = "xjoker/codex-switch/.github/workflows/release.yml";
+const RELEASE_WORKFLOW: &str = "SoumyaRanjanBiswal1/codex-switch/.github/workflows/release.yml";
 const SYSTEM_INSTALL_DIR: &str = "/usr/local/bin";
 const SYSTEM_INSTALL_MARKER_NAME: &str = ".codex-switch-system-install-v1";
 const UPDATE_TTL_SECS: i64 = 12 * 60 * 60;
@@ -1054,9 +1054,9 @@ mod tests {
                 "--bundle",
                 "/tmp/codex-switch-build-provenance.json",
                 "--repo",
-                "xjoker/codex-switch",
+                "SoumyaRanjanBiswal1/codex-switch",
                 "--signer-workflow",
-                "xjoker/codex-switch/.github/workflows/release.yml",
+                "SoumyaRanjanBiswal1/codex-switch/.github/workflows/release.yml",
                 "--source-ref",
                 "refs/tags/v20260729.2.0",
                 "--source-digest",
@@ -1113,11 +1113,11 @@ mod tests {
     fn release_api_url_uses_latest_or_tag_endpoint() {
         assert_eq!(
             release_api_url(None),
-            "https://api.github.com/repos/xjoker/codex-switch/releases/latest"
+            "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/releases/latest"
         );
         assert_eq!(
             release_api_url(Some("0.1.0")),
-            "https://api.github.com/repos/xjoker/codex-switch/releases/tags/v0.1.0"
+            "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/releases/tags/v0.1.0"
         );
     }
 
@@ -1135,7 +1135,9 @@ mod tests {
             "path traversal survived encoding: {url}"
         );
         assert!(
-            url.starts_with("https://api.github.com/repos/xjoker/codex-switch/releases/tags/"),
+            url.starts_with(
+                "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/releases/tags/"
+            ),
             "the request must stay inside this repository: {url}"
         );
     }
@@ -1174,7 +1176,7 @@ mod tests {
     fn release_api_url_dev_uses_dev_tag() {
         assert_eq!(
             release_api_url(Some("dev")),
-            "https://api.github.com/repos/xjoker/codex-switch/releases/tags/dev"
+            "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/releases/tags/dev"
         );
     }
 
@@ -1182,11 +1184,11 @@ mod tests {
     fn tag_ref_api_url_uses_the_exact_release_tag() {
         assert_eq!(
             tag_ref_api_url("dev"),
-            "https://api.github.com/repos/xjoker/codex-switch/git/ref/tags/dev"
+            "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/git/ref/tags/dev"
         );
         assert_eq!(
             tag_ref_api_url("release/candidate"),
-            "https://api.github.com/repos/xjoker/codex-switch/git/ref/tags/release%2Fcandidate"
+            "https://api.github.com/repos/SoumyaRanjanBiswal1/codex-switch/git/ref/tags/release%2Fcandidate"
         );
     }
 

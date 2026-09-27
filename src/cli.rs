@@ -32,7 +32,7 @@ pub enum DaemonCommand {
 #[command(
     name = "codex-switch",
     version = concat!(env!("CARGO_PKG_VERSION"), "\n", env!("CARGO_PKG_REPOSITORY")),
-    about = "Codex account switcher -- multi-profile manager with usage dashboard\nhttps://github.com/xjoker/codex-switch",
+    about = "Codex account switcher -- multi-profile manager with usage dashboard\nhttps://github.com/SoumyaRanjanBiswal1/codex-switch",
     long_about = None,
     after_help = "Examples:\n  codex-switch list\n  codex-switch use\n  codex-switch rename old-alias new-alias\n  codex-switch import ./auth-backups\n  codex-switch self-update --check\n\nRun `codex-switch <command> --help` for command-specific options."
 )]
