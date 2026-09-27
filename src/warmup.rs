@@ -477,6 +477,57 @@ fn build_body(model: &str) -> serde_json::Value {
     })
 }
 
+// HTTP 200 only means the SSE connection opened. Read through the terminal
+// event so the request actually finishes and stream-level failures are visible.
+async fn finish_response(mut response: reqwest::Response) -> Result<()> {
+    let mut pending = Vec::new();
+    while let Some(chunk) = response.chunk().await.context("reading warmup response")? {
+        pending.extend_from_slice(&chunk);
+        while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = pending.drain(..=end).collect();
+            let line = std::str::from_utf8(&line).context("invalid warmup stream encoding")?;
+            if completed_event(line)? {
+                return Ok(());
+            }
+        }
+        if pending.len() > 1024 * 1024 {
+            bail!("warmup stream event exceeded 1 MiB");
+        }
+    }
+    if completed_event(std::str::from_utf8(&pending).context("invalid warmup stream encoding")?)? {
+        return Ok(());
+    }
+    bail!("warmup stream ended before response.completed; quota timer is unverified")
+}
+
+fn completed_event(line: &str) -> Result<bool> {
+    let Some(data) = line.trim().strip_prefix("data:") else {
+        return Ok(false);
+    };
+    let data = data.trim();
+    if data.is_empty() || data == "[DONE]" {
+        return Ok(false);
+    }
+    let event: serde_json::Value = serde_json::from_str(data).context("invalid warmup event")?;
+    match event["type"].as_str() {
+        Some("response.completed") => {
+            if event["response"]["status"].as_str() != Some("completed") {
+                bail!("warmup completion event did not report completed status");
+            }
+            Ok(true)
+        }
+        Some(kind @ ("response.failed" | "response.incomplete" | "error")) => {
+            let code = event["code"]
+                .as_str()
+                .or_else(|| event["error"]["code"].as_str())
+                .or_else(|| event["response"]["error"]["code"].as_str())
+                .unwrap_or("unknown");
+            bail!("warmup stream returned {kind} ({code}); quota timer is unverified")
+        }
+        _ => Ok(false),
+    }
+}
+
 fn make_request(
     client: &reqwest::Client,
     access_token: &str,
@@ -510,7 +561,7 @@ async fn warmup_additional_models(
     for model in additional_models {
         let body = build_body(model);
         debug!("warmup additional pool POST → {RESPONSES_URL} (model={model})");
-        let mut resp = make_request(client, access_token, account_id, is_fedramp, &body)
+        let resp = make_request(client, access_token, account_id, is_fedramp, &body)
             .send()
             .await
             .map_err(|e| crate::auth::format_reqwest_error("additional warmup failed", &e))?;
@@ -520,7 +571,7 @@ async fn warmup_additional_models(
             let snippet: String = text.chars().take(160).collect();
             bail!("additional model {model}: HTTP {status} — {snippet}");
         }
-        let _ = resp.chunk().await;
+        finish_response(resp).await?;
     }
     Ok(())
 }
@@ -578,9 +629,83 @@ fn persist_refreshed_tokens(
 /// Send a minimal completion request to trigger the quota window countdown for a profile.
 ///
 /// The 5-hour and 7-day windows only start after the first real API call.
-/// This sends the lightest valid request ("ping") and discards the response body,
-/// which is enough for the server to stamp the window start time.
+/// Wait for a completed ping, then verify a fixed reset deadline using fresh usage.
 pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
+    send_warmup_request(alias, profile_path).await?;
+    let current = crate::profile::read_current();
+    let mut previous = crate::usage::fetch_usage_retried_unattended(alias, profile_path, &current)
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "request completed, but timer verification failed: {}",
+                e.summary
+            )
+        })?;
+    for _ in 0..3 {
+        tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+        let next = crate::usage::fetch_usage_retried_unattended(alias, profile_path, &current)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "request completed, but timer verification failed: {}",
+                    e.summary
+                )
+            })?;
+        if countdowns_verified(&previous, &next) {
+            return Ok(());
+        }
+        previous = next;
+    }
+    bail!(
+        "request completed, but no running quota countdown could be verified; reset deadlines are missing or still moving forward"
+    )
+}
+
+fn countdowns_verified(before: &crate::usage::UsageInfo, after: &crate::usage::UsageInfo) -> bool {
+    let (Some(t1), Some(t2)) = (before.fetched_at, after.fetched_at) else {
+        return false;
+    };
+    if t2 - t1 < 5 {
+        return false;
+    }
+    let main = match (&before.primary, &after.primary) {
+        (Some(a), Some(b)) => fixed_deadline(a, b, t2),
+        (None, None) => match (&before.secondary, &after.secondary) {
+            (Some(a), Some(b)) => fixed_deadline(a, b, t2),
+            _ => false,
+        },
+        _ => false,
+    };
+    main && after
+        .additional_limits
+        .iter()
+        .filter(|p| is_model_quota_limit(p))
+        .all(|pool| {
+            before
+                .additional_limits
+                .iter()
+                .find(|p| {
+                    p.limit_name == pool.limit_name && p.metered_feature == pool.metered_feature
+                })
+                .is_some_and(|old| match (&old.primary, &pool.primary) {
+                    (Some(a), Some(b)) => fixed_deadline(a, b, t2),
+                    (None, None) => match (&old.secondary, &pool.secondary) {
+                        (Some(a), Some(b)) => fixed_deadline(a, b, t2),
+                        _ => false,
+                    },
+                    _ => false,
+                })
+        })
+}
+
+fn fixed_deadline(a: &crate::usage::WindowUsage, b: &crate::usage::WindowUsage, now: i64) -> bool {
+    match (a.resets_at, b.resets_at) {
+        (Some(first), Some(second)) => first > now && second > now && first.abs_diff(second) <= 1,
+        _ => false,
+    }
+}
+
+async fn send_warmup_request(alias: &str, profile_path: &Path) -> Result<()> {
     let usage = match crate::cache::get(alias) {
         Some(usage) => Some(usage),
         None => {
@@ -675,7 +800,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
 
     debug!("[{alias}] warmup POST → {RESPONSES_URL} (model={model})");
 
-    let mut resp = make_request(
+    let resp = make_request(
         &client,
         &access_token,
         account_id.as_deref(),
@@ -691,9 +816,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
 
     match status.as_u16() {
         200 => {
-            // Quota window is triggered server-side on request receipt.
-            // Read one chunk to confirm streaming started, then drop.
-            let _ = resp.chunk().await;
+            finish_response(resp).await?;
             warmup_additional_models(
                 &client,
                 &access_token,
@@ -728,7 +851,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
                         format!("{alias}: failed to refresh the supported warmup model")
                     })?;
                 let retry_body = build_body(new_model);
-                let mut retry_resp = make_request(
+                let retry_resp = make_request(
                     &client,
                     &access_token,
                     account_id.as_deref(),
@@ -740,7 +863,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
                 .map_err(|e| crate::auth::format_reqwest_error("warmup retry failed", &e))?;
                 let retry_status = retry_resp.status();
                 if retry_status.is_success() {
-                    let _ = retry_resp.chunk().await;
+                    finish_response(retry_resp).await?;
                     return warmup_additional_models(
                         &client,
                         &access_token,
@@ -780,7 +903,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
                 {
                     Ok(refreshed) => {
                         persist_refreshed_tokens(alias, rt, &refreshed)?;
-                        let mut retry_resp = make_request(
+                        let retry_resp = make_request(
                             &client,
                             &refreshed.access_token,
                             account_id.as_deref(),
@@ -794,7 +917,7 @@ pub async fn warmup_account(alias: &str, profile_path: &Path) -> Result<()> {
                         })?;
                         let retry_status = retry_resp.status();
                         if retry_status.is_success() {
-                            let _ = retry_resp.chunk().await;
+                            finish_response(retry_resp).await?;
                             return warmup_additional_models(
                                 &client,
                                 &refreshed.access_token,
@@ -879,7 +1002,114 @@ pub(crate) async fn fetch_models_for_profile(
 
 #[cfg(test)]
 mod tests {
+    const COMPLETED_STREAM: &str =
+        "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n";
     use super::*;
+
+    #[tokio::test]
+    async fn warmup_requires_completion_and_rejects_http_200_stream_failures() {
+        use axum::{Router, routing::get};
+        let app = Router::new()
+            .route("/complete", get(|| async { COMPLETED_STREAM }))
+            .route("/failed", get(|| async { "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"quota_exceeded\"}}}\n\n" }))
+            .route("/truncated", get(|| async { "data: {\"type\":\"response.created\"}\n\n" }))
+            .route("/done", get(|| async { "data: [DONE]\n\n" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+        for (route, succeeds) in [
+            ("complete", true),
+            ("failed", false),
+            ("truncated", false),
+            ("done", false),
+        ] {
+            let response = client
+                .get(format!("http://{addr}/{route}"))
+                .send()
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            assert_eq!(finish_response(response).await.is_ok(), succeeds, "{route}");
+        }
+        server.abort();
+    }
+
+    #[test]
+    fn countdown_verification_rejects_sliding_deadlines_and_accepts_rounded_zero_usage() {
+        use crate::usage::{UsageInfo, WindowUsage};
+        let before = UsageInfo {
+            fetched_at: Some(1000),
+            primary: Some(WindowUsage {
+                resets_at: Some(19000),
+                used_percent: Some(0.0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut after = before.clone();
+        after.fetched_at = Some(1006);
+        assert!(countdowns_verified(&before, &after));
+        after.primary.as_mut().unwrap().resets_at = Some(19006);
+        assert!(!countdowns_verified(&before, &after));
+        after.primary.as_mut().unwrap().resets_at = None;
+        assert!(!countdowns_verified(&before, &after));
+        assert!(!countdowns_verified(&before, &before));
+        after = before.clone();
+        after.fetched_at = Some(19001);
+        assert!(!countdowns_verified(&before, &after));
+    }
+
+    #[test]
+    fn active_weekly_window_does_not_verify_a_sliding_five_hour_window() {
+        use crate::usage::{UsageInfo, WindowUsage};
+        let before = UsageInfo {
+            fetched_at: Some(1000),
+            primary: Some(WindowUsage {
+                resets_at: Some(19000),
+                ..Default::default()
+            }),
+            secondary: Some(WindowUsage {
+                resets_at: Some(500000),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut after = before.clone();
+        after.fetched_at = Some(1006);
+        after.primary.as_mut().unwrap().resets_at = Some(19006);
+        assert!(!countdowns_verified(&before, &after));
+        after.primary = None;
+        let mut free_before = before;
+        free_before.primary = None;
+        assert!(countdowns_verified(&free_before, &after));
+    }
+
+    #[test]
+    fn additional_pool_must_also_have_a_fixed_deadline() {
+        use crate::usage::{UsageInfo, WindowUsage};
+        let window = WindowUsage {
+            resets_at: Some(19000),
+            ..Default::default()
+        };
+        let mut pool = model_pool("mini");
+        pool.primary = Some(window.clone());
+        let before = UsageInfo {
+            fetched_at: Some(1000),
+            primary: Some(window),
+            additional_limits: vec![pool],
+            ..Default::default()
+        };
+        let mut after = before.clone();
+        after.fetched_at = Some(1006);
+        assert!(countdowns_verified(&before, &after));
+        after.additional_limits[0]
+            .primary
+            .as_mut()
+            .unwrap()
+            .resets_at = Some(19006);
+        assert!(!countdowns_verified(&before, &after));
+    }
 
     #[test]
     fn test_model_cache_keys_are_isolated_per_account() {
@@ -1636,7 +1866,7 @@ mod tests {
             )
             .await;
 
-            let result = warmup_account(alias, &profile_path).await;
+            let result = send_warmup_request(alias, &profile_path).await;
 
             assert!(
                 result.is_err(),
@@ -1837,7 +2067,7 @@ mod tests {
                                 .copied()
                                 .or_else(|| statuses.last().copied())
                                 .unwrap_or(StatusCode::OK);
-                            (status, "")
+                            (status, COMPLETED_STREAM)
                         }
                     }),
                 );
@@ -1892,7 +2122,7 @@ mod tests {
 
             let (_token_calls, _guards) = start_rotating_mock_server(vec![StatusCode::OK]).await;
 
-            let result = warmup_account(alias, &profile_path).await;
+            let result = send_warmup_request(alias, &profile_path).await;
 
             let error = result.expect_err(
                 "the pre-warmup refresh rotated the credential and the write back failed, so \
@@ -1923,7 +2153,7 @@ mod tests {
             let (_token_calls, _guards) =
                 start_rotating_mock_server(vec![StatusCode::UNAUTHORIZED, StatusCode::OK]).await;
 
-            let result = warmup_account(alias, &profile_path).await;
+            let result = send_warmup_request(alias, &profile_path).await;
 
             let error = result.expect_err(
                 "the 401 retry refreshed and rotated the credential; a failed write back must \
@@ -1986,7 +2216,7 @@ mod tests {
             for (alias, path) in [(broken, broken_path), (healthy, healthy_path)] {
                 let alias = alias.to_string();
                 tasks.spawn(async move {
-                    let result = warmup_account(&alias, &path).await;
+                    let result = send_warmup_request(&alias, &path).await;
                     (alias, result)
                 });
             }
@@ -2041,7 +2271,10 @@ mod tests {
                         }
                     }),
                 )
-                .route("/codex/responses", post(|| async { (StatusCode::OK, "") }));
+                .route(
+                    "/codex/responses",
+                    post(|| async { (StatusCode::OK, COMPLETED_STREAM) }),
+                );
 
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let addr = listener.local_addr().unwrap();
@@ -2082,7 +2315,7 @@ mod tests {
 
             let (models_calls, _guards) = start_models_counting_mock_server().await;
 
-            warmup_account(alias, &profile_path)
+            send_warmup_request(alias, &profile_path)
                 .await
                 .expect("a warmup against a healthy mock server must succeed");
 
@@ -2127,7 +2360,7 @@ mod tests {
 
             let (models_calls, _guards) = start_models_counting_mock_server().await;
 
-            warmup_account(alias, &profile_path)
+            send_warmup_request(alias, &profile_path)
                 .await
                 .expect("a warmup against a healthy mock server must succeed");
 
@@ -2177,7 +2410,7 @@ mod tests {
                         let counter = responses_counter.clone();
                         async move {
                             counter.fetch_add(1, Ordering::SeqCst);
-                            (StatusCode::OK, "")
+                            (StatusCode::OK, COMPLETED_STREAM)
                         }
                     }),
                 );
@@ -2221,7 +2454,7 @@ mod tests {
 
             // First warmup: the account has no additional quota pool.
             crate::cache::put(alias, &crate::usage::UsageInfo::default());
-            warmup_account(alias, &profile_path)
+            send_warmup_request(alias, &profile_path)
                 .await
                 .expect("the first warmup against a healthy mock server must succeed");
             assert_eq!(
@@ -2245,7 +2478,7 @@ mod tests {
                     ..Default::default()
                 },
             );
-            warmup_account(alias, &profile_path)
+            send_warmup_request(alias, &profile_path)
                 .await
                 .expect("the second warmup against a healthy mock server must succeed");
 
