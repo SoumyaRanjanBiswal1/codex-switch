@@ -86,3 +86,12 @@ Destructive or consumptive actions always require confirmation.
 - See how these commands combine into workflows in the [Feature guide](Feature-Guide).
 - Adjust defaults, proxy, and daemon behavior in [Configuration](Configuration).
 - Check update channels and flags in [Updating](Updating).
+
+## Display timezone in this fork
+
+All displayed reset times, account detail dates, token expirations, daemon status
+times, and diagnostic log timestamps use India Standard Time (IST, UTC+05:30),
+regardless of the operating system timezone. The accounts table labels its
+timezone as IST and uses a 24-hour clock. Weekly resets roll over to the correct
+IST calendar date. Relative countdowns are unchanged; JSON/API timestamps retain
+their original UTC or Unix timestamp representation for compatibility.

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::{Days, Local, NaiveDate};
+use chrono::{Days, NaiveDate, Utc};
 use fs4::FileExt;
 use std::{
     fs::{self, OpenOptions},
@@ -9,6 +9,20 @@ use std::{
     time::{Duration, Instant},
 };
 use tracing_subscriber::fmt::MakeWriter;
+
+pub(crate) struct IstTimer;
+
+impl tracing_subscriber::fmt::time::FormatTime for IstTimer {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        write!(
+            w,
+            "{}",
+            Utc::now()
+                .with_timezone(&crate::output::display_timezone())
+                .format("%Y-%m-%d %H:%M:%S%.3f IST")
+        )
+    }
+}
 
 const LOG_PREFIX: &str = "codex-switch";
 const MAX_LOG_AGE_DAYS: u64 = 3;
@@ -106,7 +120,9 @@ impl Write for LogFile {
             maintenance_due(state.last_maintenance, now, state.bytes_since_maintenance);
         append_log(
             &state.dir,
-            Local::now().date_naive(),
+            Utc::now()
+                .with_timezone(&crate::output::display_timezone())
+                .date_naive(),
             retained,
             run_maintenance,
         )?;

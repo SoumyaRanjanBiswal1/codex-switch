@@ -7,6 +7,8 @@ and is based on [xjoker/codex-switch](https://github.com/xjoker/codex-switch).
 It includes [verified quota warmup](WARMUP_FIX.md). Version `20260927.1.0`
 identifies the first fork build. Installers and self-update target this fork;
 GitHub build-provenance verification remains enabled for release updates.
+Version `20260927.2.0` displays times in **IST (UTC+05:30)**, including
+reset deadlines, account details, daemon status, and diagnostic logs.
 
 To install directly from this fork with Rust 1.88 or newer:
 

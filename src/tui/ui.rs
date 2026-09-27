@@ -438,6 +438,7 @@ fn render_account_table(f: &mut Frame, app: &App, area: Rect) {
     } else {
         format!(" Accounts ({})", app.accounts.len())
     };
+    title.push_str(" IST");
     if loading_count > 0 {
         title.push_str(&format!(" -- fetching {}...", loading_count));
     }

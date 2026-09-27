@@ -59,8 +59,12 @@ fn format_resync_confirm_prompt(
     live_last_refresh: Option<&str>,
     profile_last_refresh: Option<&str>,
 ) -> String {
-    let live_ts = live_last_refresh.unwrap_or("unknown");
-    let profile_ts = profile_last_refresh.unwrap_or("unknown");
+    let live_ts = live_last_refresh
+        .map(output::format_local_datetime)
+        .unwrap_or_else(|| "unknown".into());
+    let profile_ts = profile_last_refresh
+        .map(output::format_local_datetime)
+        .unwrap_or_else(|| "unknown".into());
     format!(
         "Update profile '{alias}' with live credentials? (live last_refresh={live_ts} -> profile last_refresh={profile_ts}) [Y/n] "
     )
@@ -123,12 +127,14 @@ async fn main() {
         use tracing_subscriber::fmt::writer::MakeWriterExt;
         tracing_subscriber::fmt()
             .with_env_filter(filter)
+            .with_timer(logging::IstTimer)
             .with_ansi(false)
             .with_writer(std::io::stderr.and(file_writer))
             .init();
     } else {
         tracing_subscriber::fmt()
             .with_env_filter(filter)
+            .with_timer(logging::IstTimer)
             .with_writer(std::io::stderr)
             .init();
     }
@@ -217,9 +223,9 @@ mod resync_reporting_tests {
         );
         assert!(prompt.contains("acme"));
         assert!(prompt.contains("live"));
-        assert!(prompt.contains("2026-07-20T00:00:00Z"));
+        assert!(prompt.contains("2026-07-20 05:30 IST"));
         assert!(prompt.contains("profile"));
-        assert!(prompt.contains("2026-07-10T00:00:00Z"));
+        assert!(prompt.contains("2026-07-10 05:30 IST"));
         assert!(prompt.contains("[Y/n]"));
     }
 

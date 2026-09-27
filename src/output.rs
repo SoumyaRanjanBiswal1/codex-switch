@@ -2,7 +2,7 @@ use std::io::{self, IsTerminal, Write};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use serde::Serialize;
 
 use crate::jwt::AccountInfo;
@@ -249,10 +249,15 @@ pub fn format_iso8601(ts: i64) -> String {
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
 }
 
+/// India Standard Time is UTC+05:30 year-round, independent of the host timezone.
+pub fn display_timezone() -> FixedOffset {
+    FixedOffset::east_opt(5 * 3600 + 30 * 60).expect("valid IST offset")
+}
+
 /// Shared timestamp formatter: "2h30m (14:30)" or "1d12h (03-27 14:30)"
 pub fn format_reset_time(ts: i64) -> String {
-    let now = Local::now();
-    let dt: DateTime<Local> = match Local.timestamp_opt(ts, 0).single() {
+    let now = Utc::now().with_timezone(&display_timezone());
+    let dt: DateTime<FixedOffset> = match display_timezone().timestamp_opt(ts, 0).single() {
         Some(d) => d,
         None => return "--".into(),
     };
@@ -272,13 +277,13 @@ pub fn format_reset_time(ts: i64) -> String {
     } else {
         dt.format("%m-%d %H:%M").to_string()
     };
-    format!("{relative} ({local_fmt})")
+    format!("{relative} ({local_fmt} IST)")
 }
 
 /// Short reset time for table columns: "14:30" or "03-27 14:30"
 pub fn format_reset_short(ts: i64) -> String {
-    let now = Local::now();
-    let dt: DateTime<Local> = match Local.timestamp_opt(ts, 0).single() {
+    let now = Utc::now().with_timezone(&display_timezone());
+    let dt: DateTime<FixedOffset> = match display_timezone().timestamp_opt(ts, 0).single() {
         Some(d) => d,
         None => return "--".into(),
     };
@@ -292,10 +297,10 @@ pub fn format_reset_short(ts: i64) -> String {
     }
 }
 
-/// Format a timestamp as local time: "HH:MM" (today) or "MM-DD HH:MM" (other days).
+/// Format a timestamp in IST: "HH:MM" (today) or "MM-DD HH:MM" (other days).
 pub fn format_local_time(ts: i64) -> String {
-    let now = Local::now();
-    let dt: DateTime<Local> = match Local.timestamp_opt(ts, 0).single() {
+    let now = Utc::now().with_timezone(&display_timezone());
+    let dt: DateTime<FixedOffset> = match display_timezone().timestamp_opt(ts, 0).single() {
         Some(d) => d,
         None => return "--".into(),
     };
@@ -306,24 +311,24 @@ pub fn format_local_time(ts: i64) -> String {
     }
 }
 
-/// Full local timestamp for detail views. The UTC offset keeps the value
+/// Full IST timestamp for detail views. The UTC offset keeps the value
 /// unambiguous when screenshots or logs cross time zones.
 pub fn format_local_timestamp(ts: i64) -> String {
-    Local
+    display_timezone()
         .timestamp_opt(ts, 0)
         .single()
-        .map(|dt| dt.format("%Y-%m-%d %H:%M %:z").to_string())
+        .map(|dt| dt.format("%Y-%m-%d %H:%M IST (%:z)").to_string())
         .unwrap_or_else(|| "--".into())
 }
 
 /// Format a token expiry with an explicit state so past JWT `exp` values are
 /// never presented as a future expiration.
 pub fn format_token_expiry(ts: i64) -> String {
-    let Some(dt) = Local.timestamp_opt(ts, 0).single() else {
+    let Some(dt) = display_timezone().timestamp_opt(ts, 0).single() else {
         return "not reported".into();
     };
-    let timestamp = dt.format("%Y-%m-%d %H:%M %:z");
-    if dt <= Local::now() {
+    let timestamp = dt.format("%Y-%m-%d %H:%M IST (%:z)");
+    if dt <= Utc::now().with_timezone(&display_timezone()) {
         format!("expired {timestamp}")
     } else {
         format!("expires {timestamp}")
@@ -333,8 +338,8 @@ pub fn format_token_expiry(ts: i64) -> String {
 pub fn format_local_datetime(value: &str) -> String {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| {
-            let local = dt.with_timezone(&Local);
-            local.format("%Y-%m-%d %H:%M %:z").to_string()
+            let local = dt.with_timezone(&display_timezone());
+            local.format("%Y-%m-%d %H:%M IST (%:z)").to_string()
         })
         .unwrap_or_else(|_| "unknown".to_string())
 }
@@ -588,30 +593,43 @@ mod tests {
     }
 
     #[test]
-    fn local_timestamp_includes_date_time_and_system_offset() {
-        let rendered = format_local_timestamp(1_783_857_600);
-        let expected = Local
-            .timestamp_opt(1_783_857_600, 0)
-            .single()
-            .unwrap()
-            .format("%Y-%m-%d %H:%M %:z")
-            .to_string();
-
-        assert_eq!(rendered, expected);
-        assert!(!rendered.ends_with('Z'));
+    fn reset_reference_times_are_displayed_in_ist() {
+        assert_eq!(
+            format_local_timestamp(1_790_506_796),
+            "2026-09-27 16:29 IST (+05:30)"
+        );
+        assert_eq!(
+            format_local_datetime("2026-10-03T20:19:00Z"),
+            "2026-10-04 01:49 IST (+05:30)"
+        );
+        assert_eq!(
+            format_local_datetime("2026-07-20T08:00:00Z"),
+            "2026-07-20 13:30 IST (+05:30)"
+        );
+        assert_eq!(format_local_datetime("not-a-date"), "unknown");
     }
 
     #[test]
-    fn rfc3339_detail_date_is_converted_to_system_timezone() {
-        let rendered = format_local_datetime("2026-07-20T08:00:00Z");
-        let expected = DateTime::parse_from_rfc3339("2026-07-20T08:00:00Z")
+    fn table_times_use_ist_and_handle_date_rollover() {
+        let now = Utc::now().with_timezone(&display_timezone());
+        let later_today = now
+            .date_naive()
+            .and_hms_opt(23, 59, 59)
             .unwrap()
-            .with_timezone(&Local)
-            .format("%Y-%m-%d %H:%M %:z")
-            .to_string();
-
-        assert_eq!(rendered, expected);
-        assert_eq!(format_local_datetime("not-a-date"), "unknown");
+            .and_local_timezone(display_timezone())
+            .single()
+            .unwrap();
+        assert_eq!(format_local_time(later_today.timestamp()), "23:59");
+        let tomorrow = later_today + chrono::Duration::days(1);
+        assert_eq!(
+            format_reset_short(tomorrow.timestamp()),
+            tomorrow.format("%m-%d 23:59").to_string()
+        );
+        assert!(format_reset_time(tomorrow.timestamp()).ends_with("23:59 IST)"));
+        assert_eq!(format_reset_short(0), "reset");
+        assert_eq!(format_local_timestamp(i64::MAX), "--");
+        // Machine-readable timestamps remain unambiguous UTC/epoch values.
+        assert_eq!(format_iso8601(0), "1970-01-01T00:00:00Z");
     }
 
     #[test]

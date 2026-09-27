@@ -445,7 +445,11 @@ fn status(json: bool) -> Result<()> {
 #[cfg(any(unix, target_os = "windows"))]
 fn format_unix(ts: i64) -> String {
     chrono::DateTime::from_timestamp(ts, 0)
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .map(|dt| {
+            dt.with_timezone(&crate::output::display_timezone())
+                .format("%Y-%m-%d %H:%M:%S IST")
+                .to_string()
+        })
         .unwrap_or_else(|| ts.to_string())
 }
 
